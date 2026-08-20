@@ -220,3 +220,5 @@ __marimo__/
 # Google service account credentials - never commit
 credentials/
 *service-account*.json
+tests/
+context/

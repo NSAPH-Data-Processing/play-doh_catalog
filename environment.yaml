@@ -1,4 +1,4 @@
-name: secure_enclave_catalog
+name: play_doh_catalog
 channels:
   - defaults
   - conda-forge
