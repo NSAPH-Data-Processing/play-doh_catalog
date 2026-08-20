@@ -47,21 +47,30 @@ https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
 ```
 
 The read function also needs a range that includes the tab name, e.g.
-`Form Responses 1!A1:AZ`.
+`Form Responses 1!A1:AZ`. Put both in `sheet_config.yaml` at the repo
+root:
+
+```yaml
+spreadsheet_id: "<spreadsheet id from step 6>"
+range: "<tab name and range from step 6>"
+```
+
+This file is committed, not secret — a spreadsheet ID and tab name don't
+grant access on their own (see `decisions.md`). Only the service-account
+credential itself needs to stay out of git.
 
 ## Local development
 
-Set these as environment variables (e.g. in a gitignored `.env` file):
+Set the credential path as an environment variable (e.g. in a gitignored
+`.env` file):
 
 ```text
 GOOGLE_APPLICATION_CREDENTIALS=credentials/service-account.json
-SHEET_SPREADSHEET_ID=<spreadsheet id from step 6>
-SHEET_RANGE=<tab name and range from step 6>
 ```
 
 ## CI (GitHub Actions)
 
-Store the JSON key's full contents as a repository secret (e.g.
-`GOOGLE_SERVICE_ACCOUNT_JSON`), then write it to a temp file at the start
-of the workflow job before running the publishing script — see the
-workflow itself once it exists (`todo.md`) for the exact step.
+Store the JSON key's full contents as a repository secret named
+`GOOGLE_SERVICE_ACCOUNT_JSON`, then write it to a temp file at the start
+of the workflow job before running the publishing script — see
+`.github/workflows/rebuild-catalog.yml` for the exact step.
