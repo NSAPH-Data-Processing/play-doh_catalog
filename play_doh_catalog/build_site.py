@@ -26,6 +26,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import yaml
+
 from play_doh_catalog.catalog_record import _slugify, build_catalog_record
 from play_doh_catalog.eligibility import evaluate_eligibility
 from play_doh_catalog.fields import normalize_row
@@ -126,13 +128,25 @@ def rebuild_site(records: list[dict], catalog_dir: Path, config_path: Path) -> N
     )
 
 
+def _load_sheet_config(sheet_config_path: Path) -> tuple[str, str]:
+    """Read (spreadsheet_id, range) from sheet_config.yaml.
+
+    Not secret - a spreadsheet ID and tab name don't grant access on their
+    own, so this is a committed config file rather than a GitHub Actions
+    secret/variable (see decisions.md).
+    """
+    with open(sheet_config_path, encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    return config["spreadsheet_id"], config["range"]
+
+
 def main() -> None:
     credentials_path = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
-    spreadsheet_id = os.environ["SHEET_SPREADSHEET_ID"]
-    sheet_range = os.environ["SHEET_RANGE"]
+    sheet_config_path = REPO_ROOT / os.environ.get("SHEET_CONFIG_PATH", "sheet_config.yaml")
     catalog_dir = REPO_ROOT / os.environ.get("CATALOG_OUTPUT_DIR", "site")
     config_path = REPO_ROOT / os.environ.get("CATALOG_CONFIG_PATH", "config.json")
 
+    spreadsheet_id, sheet_range = _load_sheet_config(sheet_config_path)
     records = build_eligible_records(spreadsheet_id, sheet_range, credentials_path)
     rebuild_site(records, catalog_dir, config_path)
     print(f"Published {len(records)} dataset(s) to {catalog_dir}")
