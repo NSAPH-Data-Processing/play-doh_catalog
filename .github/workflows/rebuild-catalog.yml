@@ -20,11 +20,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  rebuild-and-open-pr:
+  rebuild-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - name: Check out main
         uses: actions/checkout@v4
@@ -76,25 +75,14 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # PR creation is deliberately not automated - NSAPH-Data-Processing's
+      # org policy blocks the default GITHUB_TOKEN from creating PRs, and
+      # that setting is greyed out at the repo level (org-owner-only). Since
+      # catalog-update is a reusable branch, this only matters for the
+      # *first* rebuild ever: after this push, GitHub shows a "Compare &
+      # pull request" prompt for the human to click once. Every later push
+      # to this same branch automatically updates that already-open PR with
+      # no action needed - see context/decisions.md.
       - name: Push catalog-update branch
         if: steps.commit.outputs.changed == 'true'
         run: git push --force origin catalog-update
-
-      # datalad-catalog's output is deterministic (context/decisions.md),
-      # so "changed=false" here means the eligible dataset set genuinely
-      # didn't change - nothing to open/update a PR for.
-      - name: Create or update PR
-        if: steps.commit.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh pr view catalog-update --json number >/dev/null 2>&1; then
-            echo "catalog-update already has an open PR; new commit was pushed to it."
-          else
-            gh pr create \
-              --base main \
-              --head catalog-update \
-              --title "Rebuild catalog site" \
-              --body "Automated rebuild from the intake Sheet. Review the Netlify deploy preview before merging." \
-              --reviewer shreyanalluri
-          fi
