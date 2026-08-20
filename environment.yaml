@@ -1,0 +1,14 @@
+name: play_doh_catalog
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - datalad
+  - pip
+  - pytest
+  - pip:
+    - google-api-python-client
+    - google-auth
+    - datalad-catalog
+    - pyyaml
