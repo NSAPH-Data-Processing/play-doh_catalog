@@ -1,0 +1,11 @@
+name: secure_enclave_catalog
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pytest
+  - pip:
+    - google-api-python-client
+    - google-auth
