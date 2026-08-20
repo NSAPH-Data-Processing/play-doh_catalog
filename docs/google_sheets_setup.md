@@ -72,5 +72,4 @@ GOOGLE_APPLICATION_CREDENTIALS=credentials/service-account.json
 
 Store the JSON key's full contents as a repository secret named
 `GOOGLE_SERVICE_ACCOUNT_JSON`, then write it to a temp file at the start
-of the workflow job before running the publishing script — see
-`.github/workflows/rebuild-catalog.yml` for the exact step.
+of the workflow job before running the publishing script.
