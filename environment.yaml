@@ -11,3 +11,4 @@ dependencies:
     - google-api-python-client
     - google-auth
     - datalad-catalog
+    - pyyaml
