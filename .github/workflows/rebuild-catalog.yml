@@ -1,0 +1,100 @@
+name: Rebuild catalog site
+
+# Fired by the Apps Script bound to the intake Sheet whenever an
+# eligibility-relevant column changes (Review Status, Publish to Catalog,
+# or either publicity-tier question) - see context/plan.md's
+# "Implementation Architecture" and context/decisions.md for why.
+#
+# workflow_dispatch is also enabled so this can be run/tested manually
+# before the Apps Script side exists.
+on:
+  repository_dispatch:
+    types: [catalog-rebuild-check]
+  workflow_dispatch: {}
+
+# Two eligibility-relevant edits close together should not run this
+# concurrently - both would rm+rebuild+push the same branch and race each
+# other (context/decisions.md).
+concurrency:
+  group: catalog-rebuild
+  cancel-in-progress: false
+
+jobs:
+  rebuild-and-open-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # pip-only, no conda/datalad-metalad - confirmed sufficient for
+      # catalog-create/validate/add/set (context/decisions.md).
+      - name: Install dependencies
+        run: pip install google-api-python-client google-auth datalad-catalog pyyaml
+
+      - name: Write service account credentials
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: echo "$GOOGLE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/service-account.json"
+
+      # Always rebuild from the current tip of main, not on top of
+      # whatever catalog-update happened to be before - avoids drift and
+      # merge conflicts if main moved while a PR sat open for review.
+      - name: Reset catalog-update branch to main
+        run: git checkout -B catalog-update main
+
+      # spreadsheet ID / range come from sheet_config.yaml (committed, not
+      # secret - see decisions.md), not from env vars here.
+      - name: Rebuild catalog site
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ format('{0}/service-account.json', runner.temp) }}
+        run: python -m play_doh_catalog.build_site
+
+      - name: Remove credentials file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/service-account.json"
+
+      - name: Commit rebuilt site
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add site
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Rebuild catalog site"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push catalog-update branch
+        if: steps.commit.outputs.changed == 'true'
+        run: git push --force origin catalog-update
+
+      # datalad-catalog's output is deterministic (context/decisions.md),
+      # so "changed=false" here means the eligible dataset set genuinely
+      # didn't change - nothing to open/update a PR for.
+      - name: Create or update PR
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh pr view catalog-update --json number >/dev/null 2>&1; then
+            echo "catalog-update already has an open PR; new commit was pushed to it."
+          else
+            gh pr create \
+              --base main \
+              --head catalog-update \
+              --title "Rebuild catalog site" \
+              --body "Automated rebuild from the intake Sheet. Review the Netlify deploy preview before merging." \
+              --reviewer shreyanalluri
+          fi
