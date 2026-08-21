@@ -9,12 +9,15 @@ incrementally patching one, so a dataset that becomes ineligible (e.g.
 `publish_to_catalog` flips to FALSE) simply isn't re-added. Diffing and
 removing stale `catalog-add` entries would be far more error-prone.
 
-Datasets here are a flat, unrelated collection - no natural filesystem
-hierarchy - but `datalad-catalog` has no browsable view without a `home`
-dataset set (confirmed empirically: the site 404s at `/` with no home
-set). So every run also builds one synthetic root record whose
-`subdatasets` list is every eligible dataset, and sets that as home -
+`datalad-catalog` has no browsable view without a `home` dataset set
+(confirmed empirically: the site 404s at `/` with no home set). So every
+run also builds one synthetic root record, and sets that as home -
 matching the reference catalog's own top-level "lego" dataset pattern.
+
+Datasets are nested one level under a synthetic "domain" record derived
+from the Sheet's `Domain` answer, so the catalog reads as domain folders
+(Health, Climate, ...) each containing their datasets, rather than every
+dataset sitting flat under the root.
 """
 
 from __future__ import annotations
@@ -45,13 +48,16 @@ def _run_datalad(*args: str, cwd: Path) -> None:
     subprocess.run(["datalad", *args], cwd=cwd, check=True)
 
 
-def _build_root_record(records: list[dict]) -> dict:
+def _domain_dataset_id(domain: str) -> str:
+    return f"{ROOT_DATASET_ID}.domain.{_slugify(domain)}"
+
+
+def _build_domain_record(domain: str, records: list[dict]) -> dict:
     return {
         "type": "dataset",
-        "dataset_id": ROOT_DATASET_ID,
+        "dataset_id": _domain_dataset_id(domain),
         "dataset_version": ROOT_DATASET_VERSION,
-        "name": ROOT_NAME,
-        "description": ROOT_DESCRIPTION,
+        "name": domain,
         "metadata_sources": {
             "key_source_map": {},
             "sources": [{"source_name": "play_doh_catalog_root", "source_version": "manual"}],
@@ -69,22 +75,53 @@ def _build_root_record(records: list[dict]) -> dict:
     }
 
 
+def _build_root_record(domains: list[str]) -> dict:
+    return {
+        "type": "dataset",
+        "dataset_id": ROOT_DATASET_ID,
+        "dataset_version": ROOT_DATASET_VERSION,
+        "name": ROOT_NAME,
+        "description": ROOT_DESCRIPTION,
+        "metadata_sources": {
+            "key_source_map": {},
+            "sources": [{"source_name": "play_doh_catalog_root", "source_version": "manual"}],
+        },
+        "subdatasets": [
+            {
+                "dataset_id": _domain_dataset_id(domain),
+                "dataset_version": ROOT_DATASET_VERSION,
+                "dataset_path": _slugify(domain),
+            }
+            for domain in domains
+        ],
+    }
+
+
+def _group_by_domain(entries: list[tuple[str, dict]]) -> dict[str, list[dict]]:
+    """Group dataset records by domain, preserving first-seen domain order."""
+    grouped: dict[str, list[dict]] = {}
+    for domain, record in entries:
+        grouped.setdefault(domain, []).append(record)
+    return grouped
+
+
 def build_eligible_records(
     spreadsheet_id: str, sheet_range: str, credentials_path: str
-) -> list[dict]:
-    """Read the Sheet and build one catalog record per eligible dataset."""
+) -> list[tuple[str, dict]]:
+    """Read the Sheet and build one (domain, catalog record) pair per eligible dataset."""
     raw_rows = read_sheet_rows(spreadsheet_id, sheet_range, credentials_path)
-    records = []
+    entries = []
     for raw_row in raw_rows:
         normalized = normalize_row(raw_row)
         result = evaluate_eligibility(normalized)
         if result.eligible:
-            records.append(build_catalog_record(normalized, result.tier))
-    return records
+            record = build_catalog_record(normalized, result.tier)
+            entries.append((normalized.get("domain", "").strip(), record))
+    return entries
 
 
-def rebuild_site(records: list[dict], catalog_dir: Path, config_path: Path) -> None:
-    """Rebuild the catalog site at `catalog_dir` from scratch using `records`."""
+def rebuild_site(entries: list[tuple[str, dict]], catalog_dir: Path, config_path: Path) -> None:
+    """Rebuild the catalog site at `catalog_dir` from scratch using `entries`."""
     if catalog_dir.exists():
         shutil.rmtree(catalog_dir)
 
@@ -99,12 +136,15 @@ def rebuild_site(records: list[dict], catalog_dir: Path, config_path: Path) -> N
 
     shutil.copyfile(REPO_ROOT / "index.html", catalog_dir / "index.html")
 
-    root_record = _build_root_record(records)
+    grouped = _group_by_domain(entries)
+    domain_records = [_build_domain_record(domain, records) for domain, records in grouped.items()]
+    root_record = _build_root_record(list(grouped.keys()))
+    all_records = [record for records in grouped.values() for record in records]
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         metadata_path = Path(tmp_dir) / "metadata.jsonl"
         with open(metadata_path, "w", encoding="utf-8") as f:
-            for record in [root_record, *records]:
+            for record in [root_record, *domain_records, *all_records]:
                 f.write(json.dumps(record) + "\n")
 
         _run_datalad("catalog-validate", "--metadata", str(metadata_path), cwd=REPO_ROOT)
@@ -149,9 +189,9 @@ def main() -> None:
     config_path = REPO_ROOT / os.environ.get("CATALOG_CONFIG_PATH", "config.json")
 
     spreadsheet_id, sheet_range = _load_sheet_config(sheet_config_path)
-    records = build_eligible_records(spreadsheet_id, sheet_range, credentials_path)
-    rebuild_site(records, catalog_dir, config_path)
-    print(f"Published {len(records)} dataset(s) to {catalog_dir}")
+    entries = build_eligible_records(spreadsheet_id, sheet_range, credentials_path)
+    rebuild_site(entries, catalog_dir, config_path)
+    print(f"Published {len(entries)} dataset(s) to {catalog_dir}")
 
 
 if __name__ == "__main__":
