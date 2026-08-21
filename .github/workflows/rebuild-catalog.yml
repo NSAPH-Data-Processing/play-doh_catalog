@@ -1,20 +1,15 @@
 name: Rebuild catalog site
 
-# Fired by the Apps Script bound to the intake Sheet whenever an
-# eligibility-relevant column changes (Review Status, Publish to Catalog,
-# or either publicity-tier question) - see context/plan.md's
-# "Implementation Architecture" and context/decisions.md for why.
-#
-# workflow_dispatch is also enabled so this can be run/tested manually
-# before the Apps Script side exists.
+# Manually triggered from the Actions tab - see context/decisions.md for
+# why this is a human clicking "Run workflow" rather than an automated
+# Sheet-edit hook (an earlier Apps Script design was dropped as
+# unnecessary complexity for a low-frequency review process).
 on:
-  repository_dispatch:
-    types: [catalog-rebuild-check]
   workflow_dispatch: {}
 
-# Two eligibility-relevant edits close together should not run this
-# concurrently - both would rm+rebuild+push the same branch and race each
-# other (context/decisions.md).
+# A stray double-click shouldn't queue two overlapping runs. Each run now
+# cuts its own branch (see below), so this is just about avoiding
+# redundant work/duplicate issues, not protecting a shared branch.
 concurrency:
   group: catalog-rebuild
   cancel-in-progress: false
@@ -24,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
     steps:
       - name: Check out main
         uses: actions/checkout@v4
@@ -45,44 +41,58 @@ jobs:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: echo "$GOOGLE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/service-account.json"
 
-      # Always rebuild from the current tip of main, not on top of
-      # whatever catalog-update happened to be before - avoids drift and
-      # merge conflicts if main moved while a PR sat open for review.
-      - name: Reset catalog-update branch to main
-        run: git checkout -B catalog-update main
+      # A fresh branch every run, cut from the current tip of main - no
+      # reset/force-push dance needed since nothing else ever pushes here.
+      - name: Create this run's branch
+        run: git checkout -b "catalog-update-${{ github.run_number }}" main
 
       # spreadsheet ID / range come from sheet_config.yaml (committed, not
       # secret - see decisions.md), not from env vars here.
+      # CATALOG_DIFF_SUMMARY_PATH makes build_site.py also write a
+      # markdown added/removed/modified summary, used below for the
+      # rebuild Issue's body (context/decisions.md).
       - name: Rebuild catalog site
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ format('{0}/service-account.json', runner.temp) }}
+          CATALOG_DIFF_SUMMARY_PATH: ${{ format('{0}/catalog_diff_summary.md', runner.temp) }}
         run: python -m play_doh_catalog.build_site
 
       - name: Remove credentials file
         if: always()
         run: rm -f "$RUNNER_TEMP/service-account.json"
 
-      - name: Commit rebuilt site
-        id: commit
+      - name: Stage rebuilt site
+        id: stage
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add site
+          git add site catalog_state.json
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
-            git commit -m "Rebuild catalog site"
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # PR creation is deliberately not automated - NSAPH-Data-Processing's
-      # org policy blocks the default GITHUB_TOKEN from creating PRs, and
-      # that setting is greyed out at the repo level (org-owner-only). Since
-      # catalog-update is a reusable branch, this only matters for the
-      # *first* rebuild ever: after this push, GitHub shows a "Compare &
-      # pull request" prompt for the human to click once. Every later push
-      # to this same branch automatically updates that already-open PR with
-      # no action needed - see context/decisions.md.
-      - name: Push catalog-update branch
-        if: steps.commit.outputs.changed == 'true'
-        run: git push --force origin catalog-update
+      # One Issue per run, listing what actually changed - gives each
+      # rebuild its own audit trail instead of bundling multiple dataset
+      # changes into one long-lived PR (context/decisions.md). The
+      # "Fixes #<n>" in the commit message links the issue immediately
+      # (visible on its timeline without needing a PR), and since GitHub
+      # pre-fills a PR's body from the branch's sole commit, clicking
+      # "Compare & pull request" carries that same "Fixes #<n>" into the
+      # PR too, so merging auto-closes the issue.
+      - name: Open rebuild issue and commit
+        id: commit
+        if: steps.stage.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          issue_url=$(gh issue create \
+            --title "Catalog rebuild #${{ github.run_number }}" \
+            --body-file "$RUNNER_TEMP/catalog_diff_summary.md")
+          issue_number=$(basename "$issue_url")
+          git commit -m "Rebuild catalog site" -m "Fixes #${issue_number}"
+
+      - name: Push this run's branch
+        if: steps.stage.outputs.changed == 'true'
+        run: git push origin "catalog-update-${{ github.run_number }}"
