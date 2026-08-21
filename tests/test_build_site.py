@@ -5,9 +5,12 @@ from unittest.mock import MagicMock, call, patch
 from play_doh_catalog.build_site import (
     ROOT_DATASET_ID,
     ROOT_DATASET_VERSION,
+    _build_catalog_state,
     _build_domain_record,
     _build_root_record,
+    _diff_catalog_state,
     _domain_dataset_id,
+    _format_diff_summary,
     _group_by_domain,
     _load_sheet_config,
     build_eligible_records,
@@ -106,6 +109,86 @@ def test_group_by_domain_preserves_first_seen_domain_order() -> None:
     assert list(grouped.keys()) == ["Health", "Climate"]
     assert grouped["Health"] == [health_one, health_two]
     assert grouped["Climate"] == [climate_one]
+
+
+def test_build_catalog_state_is_sorted_by_dataset_id_with_stable_hash() -> None:
+    entries = [
+        ("Health", {"dataset_id": "play_doh_catalog.b-2222", "name": "B"}),
+        ("Climate", {"dataset_id": "play_doh_catalog.a-1111", "name": "A"}),
+    ]
+
+    state = _build_catalog_state(entries)
+
+    assert [d["dataset_id"] for d in state["datasets"]] == [
+        "play_doh_catalog.a-1111",
+        "play_doh_catalog.b-2222",
+    ]
+    assert state["datasets"][0]["domain"] == "Climate"
+    assert state["datasets"][0]["name"] == "A"
+    assert isinstance(state["datasets"][0]["content_hash"], str)
+    # Same record content -> same hash, independent of dict key order.
+    same_record_different_order = {"name": "A", "dataset_id": "play_doh_catalog.a-1111"}
+    restated = _build_catalog_state([("Climate", same_record_different_order)])
+    assert restated["datasets"][0]["content_hash"] == state["datasets"][0]["content_hash"]
+
+
+def test_diff_catalog_state_detects_added_removed_and_modified() -> None:
+    old_state = _build_catalog_state(
+        [
+            ("Health", {"dataset_id": "play_doh_catalog.stays-1", "name": "Stays"}),
+            ("Health", {"dataset_id": "play_doh_catalog.removed-1", "name": "Removed"}),
+            ("Health", {"dataset_id": "play_doh_catalog.changed-1", "name": "Changed", "doi": "old"}),
+        ]
+    )
+    new_state = _build_catalog_state(
+        [
+            ("Health", {"dataset_id": "play_doh_catalog.stays-1", "name": "Stays"}),
+            ("Climate", {"dataset_id": "play_doh_catalog.added-1", "name": "Added"}),
+            ("Health", {"dataset_id": "play_doh_catalog.changed-1", "name": "Changed", "doi": "new"}),
+        ]
+    )
+
+    diff = _diff_catalog_state(old_state, new_state)
+
+    assert diff["added"] == [("Climate", "Added")]
+    assert diff["removed"] == [("Health", "Removed")]
+    assert diff["modified"] == [("Health", "Changed")]
+
+
+def test_diff_catalog_state_empty_when_states_match() -> None:
+    state = _build_catalog_state([("Health", {"dataset_id": "play_doh_catalog.x-1", "name": "X"})])
+    diff = _diff_catalog_state(state, state)
+    assert diff == {"added": [], "removed": [], "modified": []}
+
+
+def test_format_diff_summary_lists_each_section() -> None:
+    diff = {
+        "added": [("Climate", "Added Dataset")],
+        "removed": [("Health", "Removed Dataset")],
+        "modified": [("Health", "Changed Dataset")],
+    }
+
+    summary = _format_diff_summary(diff)
+
+    assert "### Added" in summary
+    assert "- Added Dataset (Climate)" in summary
+    assert "### Removed" in summary
+    assert "- Removed Dataset (Health)" in summary
+    assert "### Modified" in summary
+    assert "- Changed Dataset (Health)" in summary
+
+
+def test_format_diff_summary_omits_empty_sections() -> None:
+    diff = {"added": [("Climate", "Added Dataset")], "removed": [], "modified": []}
+    summary = _format_diff_summary(diff)
+    assert "### Added" in summary
+    assert "### Removed" not in summary
+    assert "### Modified" not in summary
+
+
+def test_format_diff_summary_falls_back_when_nothing_dataset_level_changed() -> None:
+    summary = _format_diff_summary({"added": [], "removed": [], "modified": []})
+    assert "No dataset-level changes" in summary
 
 
 @patch("play_doh_catalog.build_site.read_sheet_rows")
