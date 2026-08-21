@@ -101,6 +101,8 @@ def build_catalog_record(normalized_row: dict[str, str], tier: PublicityTier) ->
     for name, field_name in (
         ("Spatial Coverage", "spatial_coverage"),
         ("Temporal Coverage", "temporal_coverage"),
+        ("Spatial Resolution", "spatial_resolution"),
+        ("Temporal Resolution", "temporal_resolution"),
     ):
         value = normalized_row.get(field_name, "").strip()
         if value:
@@ -113,8 +115,6 @@ def build_catalog_record(normalized_row: dict[str, str], tier: PublicityTier) ->
     details = _drop_empty(
         {
             "Domain": normalized_row.get("domain", ""),
-            "Spatial Resolution": normalized_row.get("spatial_resolution", ""),
-            "Temporal Resolution": normalized_row.get("temporal_resolution", ""),
             "Institutional Affiliation": normalized_row.get("institutional_affiliation", ""),
             "PI Name": normalized_row.get("pi_full_name", ""),
         }

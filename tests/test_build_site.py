@@ -5,7 +5,10 @@ from unittest.mock import MagicMock, call, patch
 from play_doh_catalog.build_site import (
     ROOT_DATASET_ID,
     ROOT_DATASET_VERSION,
+    _build_domain_record,
     _build_root_record,
+    _domain_dataset_id,
+    _group_by_domain,
     _load_sheet_config,
     build_eligible_records,
     rebuild_site,
@@ -38,17 +41,46 @@ def test_load_sheet_config_reads_spreadsheet_id_and_range(tmp_path: Path) -> Non
     assert sheet_range == "Sheet1!A1:Z"
 
 
-def test_build_root_record_lists_every_child_as_a_subdataset() -> None:
+def test_build_root_record_lists_every_domain_as_a_subdataset() -> None:
+    root = _build_root_record(["Health", "Climate"])
+
+    assert root["dataset_id"] == ROOT_DATASET_ID
+    assert root["dataset_version"] == ROOT_DATASET_VERSION
+    assert root["subdatasets"] == [
+        {
+            "dataset_id": "play_doh_catalog.domain.health",
+            "dataset_version": ROOT_DATASET_VERSION,
+            "dataset_path": "health",
+        },
+        {
+            "dataset_id": "play_doh_catalog.domain.climate",
+            "dataset_version": ROOT_DATASET_VERSION,
+            "dataset_path": "climate",
+        },
+    ]
+
+
+def test_build_root_record_with_no_domains() -> None:
+    root = _build_root_record([])
+    assert root["subdatasets"] == []
+
+
+def test_domain_dataset_id_is_namespaced_and_slugified() -> None:
+    assert _domain_dataset_id("Health") == "play_doh_catalog.domain.health"
+
+
+def test_build_domain_record_lists_its_datasets_as_subdatasets() -> None:
     records = [
         {"dataset_id": "play_doh_catalog.dataset_one-aaaa1111", "name": "Dataset One"},
         {"dataset_id": "play_doh_catalog.dataset_two-bbbb2222", "name": "Dataset Two"},
     ]
 
-    root = _build_root_record(records)
+    domain_record = _build_domain_record("Health", records)
 
-    assert root["dataset_id"] == ROOT_DATASET_ID
-    assert root["dataset_version"] == ROOT_DATASET_VERSION
-    assert root["subdatasets"] == [
+    assert domain_record["dataset_id"] == "play_doh_catalog.domain.health"
+    assert domain_record["dataset_version"] == ROOT_DATASET_VERSION
+    assert domain_record["name"] == "Health"
+    assert domain_record["subdatasets"] == [
         {
             "dataset_id": "play_doh_catalog.dataset_one-aaaa1111",
             "dataset_version": ROOT_DATASET_VERSION,
@@ -62,9 +94,18 @@ def test_build_root_record_lists_every_child_as_a_subdataset() -> None:
     ]
 
 
-def test_build_root_record_with_no_eligible_datasets() -> None:
-    root = _build_root_record([])
-    assert root["subdatasets"] == []
+def test_group_by_domain_preserves_first_seen_domain_order() -> None:
+    health_one = {"dataset_id": "play_doh_catalog.h1", "name": "H1"}
+    climate_one = {"dataset_id": "play_doh_catalog.c1", "name": "C1"}
+    health_two = {"dataset_id": "play_doh_catalog.h2", "name": "H2"}
+
+    grouped = _group_by_domain(
+        [("Health", health_one), ("Climate", climate_one), ("Health", health_two)]
+    )
+
+    assert list(grouped.keys()) == ["Health", "Climate"]
+    assert grouped["Health"] == [health_one, health_two]
+    assert grouped["Climate"] == [climate_one]
 
 
 @patch("play_doh_catalog.build_site.read_sheet_rows")
@@ -76,6 +117,7 @@ def test_build_eligible_records_filters_and_builds(mock_read_sheet_rows: MagicMo
         timestamp="2026/08/20 10:00:00",
         publicly_shareable="Yes, my data is fully shareable",
         shareable_with_consent="No, the data is not shareable under any circumstances",
+        domain="Health",
     )
     not_eligible = _raw_row(
         review_status="Pending",
@@ -84,13 +126,16 @@ def test_build_eligible_records_filters_and_builds(mock_read_sheet_rows: MagicMo
         timestamp="2026/08/20 11:00:00",
         publicly_shareable="No, my data is sensitive/restricted",
         shareable_with_consent="No, the data is not shareable under any circumstances",
+        domain="Health",
     )
     mock_read_sheet_rows.return_value = [eligible_public, not_eligible]
 
-    records = build_eligible_records("sheet-id", "Sheet1!A1:Z", "fake-creds.json")
+    entries = build_eligible_records("sheet-id", "Sheet1!A1:Z", "fake-creds.json")
 
-    assert len(records) == 1
-    assert records[0]["name"] == "Eligible Public Dataset"
+    assert len(entries) == 1
+    domain, record = entries[0]
+    assert domain == "Health"
+    assert record["name"] == "Eligible Public Dataset"
     mock_read_sheet_rows.assert_called_once_with("sheet-id", "Sheet1!A1:Z", "fake-creds.json")
 
 
@@ -123,9 +168,9 @@ def test_rebuild_site_runs_create_validate_add_set_in_order(
 ) -> None:
     catalog_dir = tmp_path / "does_not_exist_yet"
     config_path = tmp_path / "config.json"
-    records = [{"dataset_id": "play_doh_catalog.d-aaaa1111", "name": "D", "type": "dataset"}]
+    entries = [("Health", {"dataset_id": "play_doh_catalog.d-aaaa1111", "name": "D", "type": "dataset"})]
 
-    rebuild_site(records, catalog_dir, config_path)
+    rebuild_site(entries, catalog_dir, config_path)
 
     subcommands = [c.args[0] for c in mock_run_datalad.call_args_list]
     assert subcommands == ["catalog-create", "catalog-validate", "catalog-add", "catalog-set"]
@@ -170,12 +215,13 @@ def test_rebuild_site_copies_index_html_override(mock_run_datalad: MagicMock, tm
     )
 
 
-def test_rebuild_site_metadata_file_includes_root_and_all_records(tmp_path: Path) -> None:
+def test_rebuild_site_metadata_file_includes_root_domain_and_dataset_records(
+    tmp_path: Path,
+) -> None:
     catalog_dir = tmp_path / "site"
     config_path = tmp_path / "config.json"
-    records = [
-        {"dataset_id": "play_doh_catalog.d-aaaa1111", "name": "D", "type": "dataset"},
-    ]
+    dataset_record = {"dataset_id": "play_doh_catalog.d-aaaa1111", "name": "D", "type": "dataset"}
+    entries = [("Health", dataset_record)]
     captured_metadata_lines: list[str] = []
 
     def _capture_metadata_file(*args: str, cwd: Path) -> None:
@@ -185,16 +231,24 @@ def test_rebuild_site_metadata_file_includes_root_and_all_records(tmp_path: Path
             captured_metadata_lines.extend(metadata_path.read_text().splitlines())
 
     with patch("play_doh_catalog.build_site._run_datalad", side_effect=_capture_metadata_file):
-        rebuild_site(records, catalog_dir, config_path)
+        rebuild_site(entries, catalog_dir, config_path)
 
     parsed = [json.loads(line) for line in captured_metadata_lines]
-    assert len(parsed) == 2  # root record + the one dataset record
+    assert len(parsed) == 3  # root record + the domain record + the one dataset record
     assert parsed[0]["dataset_id"] == ROOT_DATASET_ID
     assert parsed[0]["subdatasets"] == [
+        {
+            "dataset_id": "play_doh_catalog.domain.health",
+            "dataset_version": ROOT_DATASET_VERSION,
+            "dataset_path": "health",
+        }
+    ]
+    assert parsed[1]["dataset_id"] == "play_doh_catalog.domain.health"
+    assert parsed[1]["subdatasets"] == [
         {
             "dataset_id": "play_doh_catalog.d-aaaa1111",
             "dataset_version": ROOT_DATASET_VERSION,
             "dataset_path": "d",
         }
     ]
-    assert parsed[1] == records[0]
+    assert parsed[2] == dataset_record
