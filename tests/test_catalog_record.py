@@ -96,6 +96,31 @@ def test_public_record_includes_locations() -> None:
     ]
 
 
+def test_top_display_includes_coverage_and_resolution() -> None:
+    record = build_catalog_record(_public_row(), PublicityTier.PUBLIC)
+    assert record["top_display"] == [
+        {"name": "Spatial Coverage", "value": "US"},
+        {"name": "Temporal Coverage", "value": "2003-2022"},
+        {"name": "Spatial Resolution", "value": "County"},
+        {"name": "Temporal Resolution", "value": "Yearly"},
+    ]
+
+
+def test_dataset_details_no_longer_includes_resolution() -> None:
+    record = build_catalog_record(_public_row(), PublicityTier.PUBLIC)
+    details_tabs = [d for d in record["additional_display"] if d["name"] == "Dataset Details"]
+    assert details_tabs == [
+        {
+            "name": "Dataset Details",
+            "content": {
+                "Domain": "Health",
+                "Institutional Affiliation": "Harvard T.H. Chan School of Public Health",
+                "PI Name": "Jane Doe",
+            },
+        }
+    ]
+
+
 def test_consent_record_omits_locations() -> None:
     record = build_catalog_record(_public_row(), PublicityTier.CONSENT)
     tab_names = [d["name"] for d in record.get("additional_display", [])]
