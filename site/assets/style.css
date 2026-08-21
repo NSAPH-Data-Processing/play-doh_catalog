@@ -1,0 +1,252 @@
+:root, :host {
+  --fa-font-regular: normal 400 1em/1 "Font Awesome 6 Free";
+  --fa-font-solid: normal 900 1em/1 "Font Awesome 6 Free";
+  --fa-font-brands: normal 400 1em/1 "Font Awesome 6 Brands";
+}
+
+@font-face {
+  font-family: 'Font Awesome 6 Free';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("fa-regular-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: 'Font Awesome 6 Free';
+  font-style: normal;
+  font-weight: 900;
+  font-display: block;
+  src: url("fa-solid-900.woff2") format("woff2");
+}
+@font-face {
+  font-family: 'Font Awesome 6 Brands';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("fa-brands-400.woff2") format("woff2");
+}
+.far,
+.fa-regular {
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 400;
+}
+.fas,
+.fa-solid {
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+}
+.fab,
+.fa-brands {
+  font-family: 'Font Awesome 6 Brands';
+  font-weight: 400;
+}
+
+body {
+  font-family: Menlo, Consolas, monospace;
+  color: #444;
+}
+
+a:hover {
+  cursor: pointer;
+}
+
+.item {
+  font-family: Menlo, Consolas, monospace;
+}
+
+.showpointer {
+  cursor: pointer;
+}
+
+.bold {
+  font-weight: bold;
+}
+
+.nav-item a {
+  color: var(--link-color);
+}
+.nav-item a:hover {
+  color: var(--link-hover-color);
+}
+
+.subdataset {
+  color: var(--link-color);
+  text-decoration: underline;
+}
+.subdataset:hover {
+  color: var(--link-hover-color);
+}
+.subdataset-disabled {
+  color: rgb(172, 172, 172);
+}
+
+.newlink {
+  color: var(--link-color);
+  text-decoration: underline;
+
+}
+.newlink:hover {
+  color: var(--link-hover-color);
+  cursor: pointer;
+}
+
+.xxlfont {
+  font-size: xx-large;
+}
+
+.xlfont {
+  font-size: x-large;
+}
+
+.lfont {
+  font-size: large;
+}
+.mfont {
+  font-size: medium;
+}
+.sfont {
+  font-size: small;
+}
+.smfont {
+  font-size: smaller;
+}
+.xsfont {
+  font-size: x-small;
+}
+.xxsfont {
+  font-size: xx-small;
+}
+
+body a {
+  color: var(--link-color);
+}
+body a:hover {
+  color: var(--link-hover-color);
+}
+
+.modal i:hover {
+  cursor: pointer;
+}
+
+ul {
+  list-style-type: none; /* Remove bullets */
+  padding-left: 1em;
+  line-height: 1.5em;
+}
+
+li[class="item"] {
+  border-bottom: 1px solid #eee;
+}
+
+li[class="item"]:last-child {
+  border-bottom: none;
+}
+
+.filesize {
+  text-align: right;
+  font-size: small;
+  position: absolute;
+  right: 1em;
+}
+
+#xsm-button {
+  font-size: small;
+  padding: 0px 3px;
+  margin-bottom: 0.5em;
+}
+
+.xsm-dl-button {
+  font-size: small;
+  padding: 0px 3px;
+}
+
+#desc_display {
+  border: 1px solid #444;
+  border-radius: 5px;
+}
+
+.form-group {
+  margin-top: 1em;
+}
+
+.overview-vid iframe {
+  border: none;
+  width: 100%;
+  height: calc(100vw * 0.5625);
+  max-width: 640px;
+  max-height: 360px;
+  box-shadow: rgba(50, 50, 93, 0.25) 0 6px 12px -2px, rgba(0, 0, 0, 0.3) 0 3px 7px -3px;
+  margin: 2em 0;
+}
+
+.type-indicator {
+  font-family: Menlo, Consolas, monospace;
+  color: #ffffff;
+  border-radius: 5px;
+  padding: 1px;
+  vertical-align: middle;
+}
+
+.type-indicator-required {
+  font-family: Menlo, Consolas, monospace;
+  color: red;
+}
+.type-indicator-optional {
+  font-family: Menlo, Consolas, monospace;
+  color: gray;
+}
+
+.item-line {
+  position: relative;
+  z-index: 0;
+}
+
+.item-line::before {
+  /* we want to draw a line, so no content needed */
+  content: '';
+
+  /* this sets the position and size of the pseudo-element */
+  position: absolute;
+  top: 50%;
+  right: 0.1em;
+  width: 0.5em;
+  height: 1px;
+  background-color: #adb5bd;
+  /* draw behind child elements */
+  z-index: -1;
+}
+
+.validation-text {
+  font-family: Menlo, Consolas, monospace;
+  color: #75787b;
+  border-radius: 4px;
+  border: 1px solid #75787b;
+  padding: 1px;
+  padding-left: 2px;
+  padding-right: 2px;
+  display: inline-block;
+}
+
+.reflink {
+  color: var(--refcolor);
+}
+.reflink:hover {
+  color: #75787b;
+  cursor: pointer;
+}
+
+.dataset-title {
+  margin-top: 0.5em;
+}
+
+.dataset-nav {
+  box-shadow: 0px 0px 4px 2px rgba(0,0,0,0.1);
+  border-radius: 4px;
+  padding: 1px 5px;
+  padding-bottom: 2px;
+}
+
+.dataset-nav-item {
+  padding-left: 5px;
+  border-left: 2px solid #a9afb440;
+}

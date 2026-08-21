@@ -97,6 +97,8 @@ def rebuild_site(records: list[dict], catalog_dir: Path, config_path: Path) -> N
         cwd=REPO_ROOT,
     )
 
+    shutil.copyfile(REPO_ROOT / "index.html", catalog_dir / "index.html")
+
     root_record = _build_root_record(records)
 
     with tempfile.TemporaryDirectory() as tmp_dir:

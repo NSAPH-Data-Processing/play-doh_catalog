@@ -26,7 +26,7 @@ IAM.
 On the new service account: **Keys → Add Key → Create new key → JSON**.
 This downloads a JSON credentials file.
 
-**This file is a secret — never commit it.** Save it locally as
+**This file is a secret.** Save it locally as
 `credentials/service-account.json` (already covered by `.gitignore`, see
 below) for local development. For CI, store its contents as a GitHub
 Actions repository secret instead of a file in the repo.
