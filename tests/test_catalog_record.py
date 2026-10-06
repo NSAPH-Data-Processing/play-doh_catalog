@@ -99,6 +99,7 @@ def test_public_record_includes_locations() -> None:
 def test_top_display_includes_coverage_and_resolution() -> None:
     record = build_catalog_record(_public_row(), PublicityTier.PUBLIC)
     assert record["top_display"] == [
+        {"name": "Depositor", "value": "Submitter Name"},
         {"name": "Spatial Coverage", "value": "US"},
         {"name": "Temporal Coverage", "value": "2003-2022"},
         {"name": "Spatial Resolution", "value": "County"},
@@ -114,14 +115,15 @@ def test_no_dataset_details_tab_and_affiliation_not_published(tier: PublicityTie
     assert "Harvard T.H. Chan School of Public Health" not in json.dumps(record)
 
 
-def test_submitter_full_name_is_the_author() -> None:
+def test_submitter_full_name_is_the_depositor_not_an_author() -> None:
     record = build_catalog_record(_public_row(), PublicityTier.PUBLIC)
-    assert record["authors"] == [{"name": "Submitter Name"}]
-
-
-def test_blank_full_name_omits_authors() -> None:
-    record = build_catalog_record(_public_row(full_name="  "), PublicityTier.PUBLIC)
+    assert {"name": "Depositor", "value": "Submitter Name"} in record["top_display"]
     assert "authors" not in record
+
+
+def test_blank_full_name_omits_depositor() -> None:
+    record = build_catalog_record(_public_row(full_name="  "), PublicityTier.PUBLIC)
+    assert "Depositor" not in [d["name"] for d in record["top_display"]]
 
 
 def test_pi_name_is_not_published() -> None:

@@ -11,10 +11,10 @@ by construction (decisions.md's whitelist-not-blacklist rationale).
 
 Field placement not spelled out in plan.md was resolved here rather than
 left pending (see decisions.md):
-- The submitter's "Full Name" is published as the dataset's author, via
-  the datalad-catalog `authors` field's free-text `name` (the form answer
-  is one string that doesn't split cleanly into given/family names). PI
-  Name and Institutional Affiliation are not published.
+- The submitter's "Full Name" is published as the dataset's "Depositor"
+  in top_display, not the datalad-catalog `authors` field - the submitter
+  deposited the data but isn't necessarily one of its authors. PI Name and
+  Institutional Affiliation are not published.
 - Consent-tier access instructions go in an "Access Instructions"
   additional_display tab, not `access_request_url`/`access_request_contact`
   - the Sheet's answer is one free-text blob mixing contact info and
@@ -81,10 +81,6 @@ def build_catalog_record(normalized_row: dict[str, str], tier: PublicityTier) ->
         },
     }
 
-    author = normalized_row.get("full_name", "").strip()
-    if author:
-        record["authors"] = [{"name": author}]
-
     description = normalized_row.get("motivation_provenance", "").strip()
     if description:
         record["description"] = description
@@ -108,6 +104,7 @@ def build_catalog_record(normalized_row: dict[str, str], tier: PublicityTier) ->
 
     top_display = []
     for name, field_name in (
+        ("Depositor", "full_name"),
         ("Spatial Coverage", "spatial_coverage"),
         ("Temporal Coverage", "temporal_coverage"),
         ("Spatial Resolution", "spatial_resolution"),
