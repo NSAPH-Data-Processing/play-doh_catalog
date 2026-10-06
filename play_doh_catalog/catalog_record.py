@@ -5,16 +5,16 @@ is eligible - it trusts its caller on that and does not re-check
 review_status/publish_to_catalog. It does still branch on `tier`, though:
 this is where plan.md's Metadata Publication Matrix whitelist actually
 gets enforced. Only fields explicitly copied below are ever included in
-the output - submitter name/email, internal staging paths, workflow
+the output - submitter email, internal staging paths, workflow
 columns, etc. are never referenced here, so they never reach the catalog,
 by construction (decisions.md's whitelist-not-blacklist rationale).
 
 Field placement not spelled out in plan.md was resolved here rather than
 left pending (see decisions.md):
-- Institutional Affiliation / PI Name go in the "Dataset Details"
-  additional_display tab, not the datalad-catalog `authors` field -
-  `authors` expects structured given/family names, and "PI Name" is a
-  single free-text form answer that doesn't split cleanly.
+- The submitter's "Full Name" is published as the dataset's author, via
+  the datalad-catalog `authors` field's free-text `name` (the form answer
+  is one string that doesn't split cleanly into given/family names). PI
+  Name and Institutional Affiliation are not published.
 - Consent-tier access instructions go in an "Access Instructions"
   additional_display tab, not `access_request_url`/`access_request_contact`
   - the Sheet's answer is one free-text blob mixing contact info and
@@ -76,10 +76,14 @@ def build_catalog_record(normalized_row: dict[str, str], tier: PublicityTier) ->
         "metadata_sources": {
             "key_source_map": {},
             "sources": [
-                {"source_name": "secure_enclave_intake_sheet", "source_version": "manual"}
+                {"source_name": "play_doh_intake_sheet", "source_version": "manual"}
             ],
         },
     }
+
+    author = normalized_row.get("full_name", "").strip()
+    if author:
+        record["authors"] = [{"name": author}]
 
     description = normalized_row.get("motivation_provenance", "").strip()
     if description:
@@ -93,7 +97,12 @@ def build_catalog_record(normalized_row: dict[str, str], tier: PublicityTier) ->
     if url:
         record["url"] = url
 
+    # The domain leads the keyword tags - the catalog is flat, so tags are
+    # how visitors find all datasets in a domain.
     keywords = _split_keywords(normalized_row.get("keywords", ""))
+    domain = normalized_row.get("domain", "").strip()
+    if domain:
+        keywords = [domain] + [kw for kw in keywords if kw.lower() != domain.lower()]
     if keywords:
         record["keywords"] = keywords
 
@@ -111,16 +120,6 @@ def build_catalog_record(normalized_row: dict[str, str], tier: PublicityTier) ->
         record["top_display"] = top_display
 
     additional_display = []
-
-    details = _drop_empty(
-        {
-            "Domain": normalized_row.get("domain", ""),
-            "Institutional Affiliation": normalized_row.get("institutional_affiliation", ""),
-            "PI Name": normalized_row.get("pi_full_name", ""),
-        }
-    )
-    if details:
-        additional_display.append({"name": "Dataset Details", "content": details})
 
     if tier == PublicityTier.PUBLIC:
         datapath = _drop_empty(

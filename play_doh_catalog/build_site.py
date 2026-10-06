@@ -1,9 +1,8 @@
 """Rebuild the datalad-catalog static site from the current eligible Sheet rows.
 
-Datasets are nested one level under a synthetic "domain" record derived
-from the Sheet's `Domain` answer, so the catalog reads as domain folders
-(Health, Climate, ...) each containing their datasets, rather than every
-dataset sitting flat under the root.
+Every dataset sits directly under the root record. The Sheet's `Domain`
+answer becomes a keyword tag on each dataset (see catalog_record.py) rather
+than a folder level, so visitors filter by tag instead of browsing domains.
 
 `catalog_state.json` is a small snapshot of
 the currently-published dataset set - not read by the site itself, just
@@ -34,23 +33,36 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ROOT_DATASET_ID = "play_doh_catalog"
 ROOT_DATASET_VERSION = "v0"
 ROOT_NAME = "Play-Doh Catalog"
-ROOT_DESCRIPTION = "Catalog of datasets imported into the secure enclave."
+DATA_INTAKE_FORM_URL = (
+    "https://docs.google.com/forms/d/e/"
+    "1FAIpQLScJ-hkr3GrqJVf-g8wN9veyvCTb_AWweDzteSGiXo2q29b39Q/viewform"
+)
+# HTML, not plain text: datalad-catalog only renders markup when the
+# description is given in its list-of-sources form (see _build_root_record),
+# which is what makes the intake form link clickable.
+ROOT_DESCRIPTION_HTML = (
+    "The Play-Doh Data Catalog lists data produced or imported by researchers and "
+    f'submitted through the <a href="{DATA_INTAKE_FORM_URL}" target="_blank" '
+    'rel="noopener noreferrer">data intake form</a>. Every dataset here includes at '
+    "least the core metadata shown on this site. Many also link to an open "
+    "repository, such as Harvard Dataverse or Zenodo, where you can find more "
+    "detailed metadata."
+)
 
 
 def _run_datalad(*args: str, cwd: Path) -> None:
     subprocess.run(["datalad", *args], cwd=cwd, check=True)
 
 
-def _domain_dataset_id(domain: str) -> str:
-    return f"{ROOT_DATASET_ID}.domain.{_slugify(domain)}"
-
-
-def _build_domain_record(domain: str, records: list[dict]) -> dict:
+def _build_root_record(records: list[dict]) -> dict:
     return {
         "type": "dataset",
-        "dataset_id": _domain_dataset_id(domain),
+        "dataset_id": ROOT_DATASET_ID,
         "dataset_version": ROOT_DATASET_VERSION,
-        "name": domain,
+        "name": ROOT_NAME,
+        # List form renders `content` as HTML, but also adds a source-picker
+        # button above it, which index.html hides with CSS.
+        "description": [{"source": ROOT_NAME, "content": ROOT_DESCRIPTION_HTML}],
         "metadata_sources": {
             "key_source_map": {},
             "sources": [{"source_name": "play_doh_catalog_root", "source_version": "manual"}],
@@ -66,36 +78,6 @@ def _build_domain_record(domain: str, records: list[dict]) -> dict:
             for record in records
         ],
     }
-
-
-def _build_root_record(domains: list[str]) -> dict:
-    return {
-        "type": "dataset",
-        "dataset_id": ROOT_DATASET_ID,
-        "dataset_version": ROOT_DATASET_VERSION,
-        "name": ROOT_NAME,
-        "description": ROOT_DESCRIPTION,
-        "metadata_sources": {
-            "key_source_map": {},
-            "sources": [{"source_name": "play_doh_catalog_root", "source_version": "manual"}],
-        },
-        "subdatasets": [
-            {
-                "dataset_id": _domain_dataset_id(domain),
-                "dataset_version": ROOT_DATASET_VERSION,
-                "dataset_path": _slugify(domain),
-            }
-            for domain in domains
-        ],
-    }
-
-
-def _group_by_domain(entries: list[tuple[str, dict]]) -> dict[str, list[dict]]:
-    """Group dataset records by domain, preserving first-seen domain order."""
-    grouped: dict[str, list[dict]] = {}
-    for domain, record in entries:
-        grouped.setdefault(domain, []).append(record)
-    return grouped
 
 
 def build_eligible_records(
@@ -129,15 +111,13 @@ def rebuild_site(entries: list[tuple[str, dict]], catalog_dir: Path, config_path
 
     shutil.copyfile(REPO_ROOT / "index.html", catalog_dir / "index.html")
 
-    grouped = _group_by_domain(entries)
-    domain_records = [_build_domain_record(domain, records) for domain, records in grouped.items()]
-    root_record = _build_root_record(list(grouped.keys()))
-    all_records = [record for records in grouped.values() for record in records]
+    records = [record for _domain, record in entries]
+    root_record = _build_root_record(records)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         metadata_path = Path(tmp_dir) / "metadata.jsonl"
         with open(metadata_path, "w", encoding="utf-8") as f:
-            for record in [root_record, *domain_records, *all_records]:
+            for record in [root_record, *records]:
                 f.write(json.dumps(record) + "\n")
 
         _run_datalad("catalog-validate", "--metadata", str(metadata_path), cwd=REPO_ROOT)
