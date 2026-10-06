@@ -99,6 +99,7 @@ def test_public_record_includes_locations() -> None:
 def test_top_display_includes_coverage_and_resolution() -> None:
     record = build_catalog_record(_public_row(), PublicityTier.PUBLIC)
     assert record["top_display"] == [
+        {"name": "Depositor", "value": "Submitter Name"},
         {"name": "Spatial Coverage", "value": "US"},
         {"name": "Temporal Coverage", "value": "2003-2022"},
         {"name": "Spatial Resolution", "value": "County"},
@@ -106,19 +107,28 @@ def test_top_display_includes_coverage_and_resolution() -> None:
     ]
 
 
-def test_dataset_details_no_longer_includes_resolution() -> None:
+@pytest.mark.parametrize("tier", [PublicityTier.PUBLIC, PublicityTier.CONSENT])
+def test_no_dataset_details_tab_and_affiliation_not_published(tier: PublicityTier) -> None:
+    record = build_catalog_record(_public_row(), tier)
+    tab_names = [d["name"] for d in record.get("additional_display", [])]
+    assert "Dataset Details" not in tab_names
+    assert "Harvard T.H. Chan School of Public Health" not in json.dumps(record)
+
+
+def test_submitter_full_name_is_the_depositor_not_an_author() -> None:
     record = build_catalog_record(_public_row(), PublicityTier.PUBLIC)
-    details_tabs = [d for d in record["additional_display"] if d["name"] == "Dataset Details"]
-    assert details_tabs == [
-        {
-            "name": "Dataset Details",
-            "content": {
-                "Domain": "Health",
-                "Institutional Affiliation": "Harvard T.H. Chan School of Public Health",
-                "PI Name": "Jane Doe",
-            },
-        }
-    ]
+    assert {"name": "Depositor", "value": "Submitter Name"} in record["top_display"]
+    assert "authors" not in record
+
+
+def test_blank_full_name_omits_depositor() -> None:
+    record = build_catalog_record(_public_row(full_name="  "), PublicityTier.PUBLIC)
+    assert "Depositor" not in [d["name"] for d in record["top_display"]]
+
+
+def test_pi_name_is_not_published() -> None:
+    record = build_catalog_record(_public_row(), PublicityTier.PUBLIC)
+    assert "Jane Doe" not in json.dumps(record)
 
 
 def test_consent_record_omits_locations() -> None:
@@ -160,13 +170,24 @@ def test_keywords_are_split_and_stripped() -> None:
     record = build_catalog_record(
         _public_row(keywords="Heat,  ADRD ,Surface Temperature"), PublicityTier.PUBLIC
     )
-    assert record["keywords"] == ["Heat", "ADRD", "Surface Temperature"]
+    assert record["keywords"] == ["Health", "Heat", "ADRD", "Surface Temperature"]
+
+
+def test_domain_leads_keywords_without_duplicating_a_matching_keyword() -> None:
+    record = build_catalog_record(
+        _public_row(domain="Health", keywords="medicare, health"), PublicityTier.PUBLIC
+    )
+    assert record["keywords"] == ["Health", "medicare"]
+
+
+def test_domain_alone_becomes_the_only_keyword() -> None:
+    record = build_catalog_record(_public_row(domain="Climate", keywords=""), PublicityTier.PUBLIC)
+    assert record["keywords"] == ["Climate"]
 
 
 @pytest.mark.parametrize("tier", [PublicityTier.PUBLIC, PublicityTier.CONSENT])
 def test_never_leaked_fields_are_absent_from_either_tier(tier: PublicityTier) -> None:
     row = _public_row(
-        full_name="Should Not Appear",
         submitter_email="should-not-appear@example.edu",
         desired_red_path="should_not_appear/path",
         globus_import_path="/should/not/appear",

@@ -6,11 +6,14 @@ from play_doh_catalog.fields import (
 )
 
 # Captured verbatim (including whitespace quirks) from the live intake
-# Sheet on 2026-08-20 - see todo.md's "Sheet access" resolution. If this
-# list stops matching HEADER_MAP, the form's questions changed and
+# Sheet, first on 2026-08-20 (see todo.md's "Sheet access" resolution) and
+# re-captured on 2026-10-06 after several form questions were reworded. If
+# this list stops matching HEADER_MAP, the form's questions changed and
 # HEADER_MAP needs updating to match.
+UNLABELED_SHEET_COLUMN = "Column 29"
+
 REAL_SHEET_HEADERS = [
-    "location in ReD ",
+    "location in ReD",
     "location in cannon",
     "Timestamp",
     "Full Name",
@@ -18,7 +21,7 @@ REAL_SHEET_HEADERS = [
     "Institutional Affiliation",
     "Email",
     (
-        "Is the dataset publicly shareable? (The data is not under a DUA, "
+        "Is the dataset shareable? (The data is not under a DUA, "
         "restricted use, etc)\n\nYour data may not be shareable if it is: "
         "\n\n1) Draft publication your data files are not ready for "
         "publication\n2) Restricted data your data files cannot be shared "
@@ -49,7 +52,7 @@ REAL_SHEET_HEADERS = [
     ),
     (
         "Provide the import path in Globus for your staged datasets "
-        "(e.g. /import/username)"
+        "(e.g. /import/username/{filename})"
     ),
     "Anything else we should know about the data?",
     (
@@ -68,15 +71,24 @@ REAL_SHEET_HEADERS = [
     ),
     "Spatial Resolution",
     "Temporal Resolution",
-    "Do you have sufficient information to create a Dataverse deposit? ",
+    (
+        "Do you have sufficient information to create a Harvard Dataverse "
+        "deposit? Preview the instructions for creating a Harvard Dataverse "
+        "deposit here"
+    ),
     "Have you received permission from a member of the  Data Team to import your restricted data?",
+    "Are you an author of this dataset?",
+    "Are you in close contact with the author(s) of this dataset? ",
+    # An extra, unlabeled spreadsheet column (no form question behind it) -
+    # deliberately left out of HEADER_MAP, so it's dropped.
+    UNLABELED_SHEET_COLUMN,
     "Review Status",
     "Publish to Catalog",
 ]
 
 
 def test_header_map_covers_every_real_sheet_header() -> None:
-    assert unmapped_headers(REAL_SHEET_HEADERS) == []
+    assert unmapped_headers(REAL_SHEET_HEADERS) == [UNLABELED_SHEET_COLUMN]
 
 
 def test_every_mapped_header_is_present_in_the_real_sheet() -> None:

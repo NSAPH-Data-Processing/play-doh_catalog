@@ -15,7 +15,7 @@ the fail-closed philosophy in decisions.md. Use `unmapped_headers` /
 `missing_expected_headers` to catch drift (a form question was reworded,
 or a new column was added) instead of assuming the map stays correct
 forever - see tests/test_fields.py, which checks it against the real
-Sheet's headers as captured on 2026-08-20.
+Sheet's headers as last captured on 2026-10-06.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ HEADER_MAP: dict[str, str] = {
     "Institutional Affiliation": "institutional_affiliation",
     "Email": "submitter_email",
     (
-        "Is the dataset publicly shareable? (The data is not under a DUA, "
+        "Is the dataset shareable? (The data is not under a DUA, "
         "restricted use, etc)\n\nYour data may not be shareable if it is: "
         "\n\n1) Draft publication your data files are not ready for "
         "publication\n2) Restricted data your data files cannot be shared "
@@ -58,7 +58,7 @@ HEADER_MAP: dict[str, str] = {
     ): "motivation_provenance",
     (
         "Provide the import path in Globus for your staged datasets "
-        "(e.g. /import/username)"
+        "(e.g. /import/username/{filename})"
     ): "globus_import_path",
     "Anything else we should know about the data?": "additional_notes",
     (
@@ -77,13 +77,19 @@ HEADER_MAP: dict[str, str] = {
     ): "keywords",
     "Spatial Resolution": "spatial_resolution",
     "Temporal Resolution": "temporal_resolution",
-    "Do you have sufficient information to create a Dataverse deposit?": "dataverse_ready",
+    (
+        "Do you have sufficient information to create a Harvard Dataverse "
+        "deposit? Preview the instructions for creating a Harvard Dataverse "
+        "deposit here"
+    ): "dataverse_ready",
     # Note the double space before "Data Team" - that's in the real header,
     # not a typo here.
     (
         "Have you received permission from a member of the  Data Team to "
         "import your restricted data?"
     ): "restricted_import_permission",
+    "Are you an author of this dataset?": "submitter_is_author",
+    "Are you in close contact with the author(s) of this dataset?": "submitter_in_contact_with_author",
     "Review Status": "review_status",
     "Publish to Catalog": "publish_to_catalog",
     "location in ReD": "location_in_red",
